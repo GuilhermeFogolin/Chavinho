@@ -140,11 +140,12 @@ button:hover {
 }
 
 .char-card img {
-  width: 140px;
-  height: 140px;
-  object-fit: contain;
+  width: 150px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 50%;
   margin-bottom: 10px;
-  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.5));
+  border: 3px solid transparent;
 }
 
 .char-card span {

@@ -24,19 +24,13 @@ const assets = {
     background: new Image(),
     chaves: new Image(),
     kiko: new Image(),
-    chiquinha: new Image(),
-    weapon_chaves: new Image(),
-    weapon_kiko: new Image(),
-    weapon_chiquinha: new Image()
+    chiquinha: new Image()
 };
 
 assets.background.src = 'assets/background.png';
 assets.chaves.src = 'assets/chaves.png';
 assets.kiko.src = 'assets/kiko.png';
 assets.chiquinha.src = 'assets/chiquinha.png';
-assets.weapon_chaves.src = 'assets/weapon_chaves.png';
-assets.weapon_kiko.src = 'assets/weapon_kiko.png';
-assets.weapon_chiquinha.src = 'assets/weapon_chiquinha.png';
 
 const charConfigs = {
     chaves: {
@@ -73,7 +67,7 @@ class Fighter {
         this.position = position;
         this.velocity = velocity;
         this.width = 100;
-        this.height = 180;
+        this.height = 150;
         this.color = color;
         this.side = side; // 'left' or 'right'
         this.health = 100;
@@ -90,15 +84,10 @@ class Fighter {
         this.hit = false;
         this.dead = false;
         this.lastAttackTime = 0;
-        this.attackFrame = 0;
-        this.bobOffset = 0;
     }
 
     draw() {
         ctx.save();
-
-        // Fluidity: Bobbing effect for idle
-        this.bobOffset = Math.sin(Date.now() / 200) * 5;
 
         // Draw Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -106,50 +95,25 @@ class Fighter {
         ctx.ellipse(this.position.x + this.width / 2, 540, 50, 10, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Hit effect
+        // Draw Character Image
         if (this.hit) ctx.filter = 'brightness(2) contrast(2) sepia(1) hue-rotate(-50deg)';
 
-        // Face correct direction
-        const isFacingLeft = this.side === 'right';
-        ctx.translate(this.position.x + this.width / 2, this.position.y + this.height / 2 + this.bobOffset);
-        if (isFacingLeft) ctx.scale(-1, 1);
-
-        // Character Sprite
-        ctx.drawImage(assets[this.charKey], -this.width / 2, -this.height / 2, this.width, this.height);
-
-        // Draw Weapon (Animated during attack)
-        const weaponImg = assets[`weapon_${this.charKey}`];
-        if (weaponImg && weaponImg.complete) {
-            ctx.save();
-            let weaponX = 30;
-            let weaponY = 20;
-            let rotation = 0;
-
-            if (this.isAttacking) {
-                const elapsed = Date.now() - this.lastAttackTime;
-                const progress = Math.min(elapsed / 300, 1);
-
-                // Swing rotation
-                rotation = Math.sin(progress * Math.PI) * 1.5;
-                weaponX += Math.sin(progress * Math.PI) * 40;
-
-                // Drawing attack visuals (sparkles or whoosh)
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 4;
-                ctx.globalAlpha = 1 - progress;
-                ctx.beginPath();
-                ctx.arc(0, 0, 100, -0.5, 0.5);
-                ctx.stroke();
-                ctx.globalAlpha = 1;
-            }
-
-            ctx.translate(weaponX, weaponY);
-            ctx.rotate(rotation);
-            ctx.drawImage(weaponImg, -25, -25, 50, 50);
-            ctx.restore();
+        // Flip image if facing left (p2 usually)
+        if (this.side === 'right') {
+            ctx.scale(-1, 1);
+            ctx.drawImage(assets[this.charKey], -this.position.x - this.width, this.position.y, this.width, this.height);
+        } else {
+            ctx.drawImage(assets[this.charKey], this.position.x, this.position.y, this.width, this.height);
         }
 
         ctx.restore();
+
+        // Draw Attack Box (Debug or Visual Effect)
+        if (this.isAttacking) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            const ax = this.side === 'left' ? this.position.x + this.width : this.position.x - this.config.attackRange;
+            ctx.fillRect(ax, this.position.y + 50, this.config.attackRange, 50);
+        }
     }
 
     update() {
@@ -175,7 +139,6 @@ class Fighter {
         // Heal passive for Chaves
         if (this.charKey === 'chaves' && this.health < 100 && Math.random() < 0.001) {
             this.health = Math.min(100, this.health + 0.5);
-            document.getElementById('p1-health').style.width = this.health + '%';
         }
 
         this.hit = false;
@@ -187,7 +150,7 @@ class Fighter {
         this.lastAttackTime = Date.now();
         setTimeout(() => {
             this.isAttacking = false;
-        }, 300);
+        }, 100);
     }
 }
 
@@ -234,7 +197,6 @@ function decreaseTimer() {
 }
 
 function rectangularCollision({ rectangle1, rectangle2 }) {
-    // Attack box is dynamic based on character width and direction
     const r1ax = rectangle1.side === 'left' ? rectangle1.position.x + rectangle1.width : rectangle1.position.x - rectangle1.config.attackRange;
 
     return (
@@ -268,13 +230,10 @@ function animate() {
     } else {
         // Simple AI for P2
         const distance = player1.position.x - player2.position.x;
-        const targetDist = player2.config.attackRange - 30;
-
-        if (Math.abs(distance) > targetDist) {
+        if (Math.abs(distance) > player2.config.attackRange - 20) {
             player2.velocity.x = distance > 0 ? player2.config.speed * 0.5 : -player2.config.speed * 0.5;
-            player2.side = distance > 0 ? 'left' : 'right';
-        } else {
-            if (Math.random() < 0.05) player2.attack();
+        } else if (Math.random() < 0.05) {
+            player2.attack();
         }
 
         if (Math.random() < 0.01 && !player2.isJumping) {
@@ -287,24 +246,21 @@ function animate() {
     if (rectangularCollision({ rectangle1: player1, rectangle2: player2 }) && player1.isAttacking) {
         player2.health -= player1.config.damage;
         player2.hit = true;
-        // Don't disable isAttacking mid-animation for fluidity, but damage should only happen once per swing
-        // We handle this by checking a hit flag or similar, but for now simple damage is fine if lastAttackTime is tracked
+        player1.isAttacking = false;
+        document.getElementById('p2-health').style.width = player2.health + '%';
+        player1.energy = Math.min(100, player1.energy + 5);
+        document.getElementById('p1-energy').style.width = player1.energy + '%';
     }
 
     // Detect collision player 2 attacking
     if (rectangularCollision({ rectangle1: player2, rectangle2: player1 }) && player2.isAttacking) {
         player1.health -= player2.config.damage;
         player1.hit = true;
+        player2.isAttacking = false;
+        document.getElementById('p1-health').style.width = player1.health + '%';
+        player2.energy = Math.min(100, player2.energy + 5);
+        document.getElementById('p2-energy').style.width = player2.energy + '%';
     }
-
-    // HUD Update
-    document.getElementById('p1-health').style.width = player1.health + '%';
-    document.getElementById('p2-health').style.width = player2.health + '%';
-
-    player1.energy = Math.min(100, player1.energy + 0.1);
-    player2.energy = Math.min(100, player2.energy + 0.1);
-    document.getElementById('p1-energy').style.width = player1.energy + '%';
-    document.getElementById('p2-energy').style.width = player2.energy + '%';
 
     // End game based on health
     if (player1.health <= 0 || player2.health <= 0) {
@@ -385,8 +341,8 @@ window.addEventListener('keydown', (event) => {
 
     switch (event.key) {
         // P1
-        case 'd': keys.d.pressed = true; player1.side = 'left'; break;
-        case 'a': keys.a.pressed = true; player1.side = 'right'; break;
+        case 'd': keys.d.pressed = true; break;
+        case 'a': keys.a.pressed = true; break;
         case 'w':
             if (!player1.isJumping) {
                 player1.velocity.y = -player1.config.jump;
@@ -396,8 +352,8 @@ window.addEventListener('keydown', (event) => {
         case 'f': player1.attack(); break;
 
         // P2
-        case 'ArrowRight': keys.ArrowRight.pressed = true; player2.side = 'left'; break;
-        case 'ArrowLeft': keys.ArrowLeft.pressed = true; player2.side = 'right'; break;
+        case 'ArrowRight': keys.ArrowRight.pressed = true; break;
+        case 'ArrowLeft': keys.ArrowLeft.pressed = true; break;
         case 'ArrowUp':
             if (!player2.isJumping && gameMode === '2P') {
                 player2.velocity.y = -player2.config.jump;
